@@ -70,6 +70,7 @@ namespace Pinetime {
 
       static constexpr ble_uuid16_t gattServiceUuid = {BLE_UUID_TYPE_16, 0x1801};
       static constexpr ble_uuid16_t serviceChangedCharUuid = {BLE_UUID_TYPE_16, 0x2A05};
+      static constexpr ble_uuid16_t clientCharacteristicConfigDescriptorUuid = {BLE_UUID_TYPE_16, BLE_GATT_DSC_CLT_CFG_UUID16};
 
       enum class Categories : uint8_t {
         Other = 0,
@@ -107,16 +108,28 @@ namespace Pinetime {
       std::unordered_map<uint32_t, AncsNotification> notifications;
 
       std::string DecodeUtf8String(os_mbuf* om, uint16_t size, uint16_t offset);
+      void StartNextDescriptorDiscovery(uint16_t connectionHandle);
+      void SubscribeToDescriptor(uint16_t connectionHandle, uint16_t descriptorHandle);
+      void AssignCharacteristicEndHandle(uint16_t characteristicValueHandle, uint16_t endHandle);
 
       bool subscriptionsDone = false;
+      bool discoveryCompleteNotified = false;
+      bool isNotificationSourceDescriptorDiscoveryComplete = false;
+      bool isDataSourceDescriptorDiscoveryComplete = false;
+      bool isNotificationSourceSubscribed = false;
+      bool isDataSourceSubscribed = false;
       uint16_t ancsStartHandle {0};
       uint16_t ancsEndHandle {0};
       uint16_t notificationSourceHandle {0};
+      uint16_t notificationSourceEndHandle {0};
       uint16_t controlPointHandle {0};
       uint16_t dataSourceHandle {0};
+      uint16_t dataSourceEndHandle {0};
       uint16_t notificationSourceDescriptorHandle {0};
       uint16_t controlPointDescriptorHandle {0};
       uint16_t dataSourceDescriptorHandle {0};
+      uint16_t pendingSubscriptionDescriptorHandle {0};
+      uint16_t lastCharacteristicValueHandle {0};
 
       uint16_t gattStartHandle {0};
       uint16_t gattEndHandle {0};
