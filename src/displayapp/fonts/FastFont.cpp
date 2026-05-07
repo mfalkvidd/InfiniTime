@@ -30,7 +30,7 @@ FastFont::Font FastFont::LoadFont(Pinetime::Controllers::FS& filesystem, const c
   }
   // Can use stat to get the size, but since the file is open we can grab it from there
   lfs_size_t size = file.ctz.size;
-  auto fontData = std::make_unique_for_overwrite<uint8_t[]>(size);
+  std::unique_ptr<uint8_t[]> fontData {new uint8_t[size]};
   if (fontData.get() == nullptr) {
     filesystem.FileClose(&file);
     return nullptr;
