@@ -606,9 +606,11 @@ namespace {
     return (codepoint >= 0x20 && codepoint <= 0x7E) ||    // Printable ASCII
            codepoint == 0xC4 ||                           // A with diaeresis
            codepoint == 0xC5 ||                           // A with ring
+           codepoint == 0xC9 ||                           // E with acute
            codepoint == 0xD6 ||                           // O with diaeresis
            codepoint == 0xE4 ||                           // a with diaeresis
            codepoint == 0xE5 ||                           // a with ring
+           codepoint == 0xE9 ||                           // e with acute
            codepoint == 0xF6 ||                           // o with diaeresis
            (codepoint >= 0x410 && codepoint <= 0x44F) ||  // Cyrillic
            codepoint == 0xB0 ||
