@@ -131,6 +131,7 @@ namespace Pinetime {
       static void Process(void* instance);
       void Work();
       bool isBleDiscoveryTimerRunning = false;
+      bool isBleDiscoveryStarted = false;
       uint8_t bleDiscoveryTimer = 0;
       TimerHandle_t measureBatteryTimer;
       uint8_t wakeLocksHeld = 0;

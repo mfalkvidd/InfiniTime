@@ -75,16 +75,20 @@ int AppleNotificationCenterClient::OnCharacteristicsDiscoveryEvent(uint16_t conn
 
   if (characteristic == nullptr && error->status == BLE_HS_EDONE) {
     NRF_LOG_INFO("ANCS Characteristic discovery complete");
+    if (lastCharacteristicValueHandle != 0) {
+      AssignCharacteristicEndHandle(lastCharacteristicValueHandle, ancsEndHandle);
+      lastCharacteristicValueHandle = 0;
+    }
     if (isCharacteristicDiscovered) {
-      ble_gattc_disc_all_dscs(connectionHandle, notificationSourceHandle, ancsEndHandle, OnANCSDescriptorDiscoveryEventCallback, this);
-    }
-    if (isDataCharacteristicDiscovered) {
-      ble_gattc_disc_all_dscs(connectionHandle, dataSourceHandle, ancsEndHandle, OnANCSDescriptorDiscoveryEventCallback, this);
-    }
-    if (isCharacteristicDiscovered == isControlCharacteristicDiscovered && isCharacteristicDiscovered == isDataCharacteristicDiscovered) {
+      StartNextDescriptorDiscovery(connectionHandle);
+    } else {
       MaybeFinishDiscovery(connectionHandle);
     }
   } else if (characteristic != nullptr) {
+    if (lastCharacteristicValueHandle != 0) {
+      AssignCharacteristicEndHandle(lastCharacteristicValueHandle, characteristic->def_handle - 1);
+    }
+
     if (ble_uuid_cmp(&notificationSourceChar.u, &characteristic->uuid.u) == 0) {
       NRF_LOG_INFO("ANCS Characteristic discovered: Notification Source");
       notificationSourceHandle = characteristic->val_handle;
@@ -98,6 +102,7 @@ int AppleNotificationCenterClient::OnCharacteristicsDiscoveryEvent(uint16_t conn
       dataSourceHandle = characteristic->val_handle;
       isDataCharacteristicDiscovered = true;
     }
+    lastCharacteristicValueHandle = characteristic->val_handle;
   }
   return 0;
 }
@@ -106,40 +111,40 @@ int AppleNotificationCenterClient::OnDescriptorDiscoveryEventCallback(uint16_t c
                                                                       const ble_gatt_error* error,
                                                                       uint16_t characteristicValueHandle,
                                                                       const ble_gatt_dsc* descriptor) {
-  if (error->status == 0) {
-    if (characteristicValueHandle == notificationSourceHandle && ble_uuid_cmp(&notificationSourceChar.u, &descriptor->uuid.u)) {
-      if (notificationSourceDescriptorHandle == 0) {
-        NRF_LOG_INFO("ANCS Descriptor discovered : %d", descriptor->handle);
-        notificationSourceDescriptorHandle = descriptor->handle;
-        isDescriptorFound = true;
-        uint8_t value[2] {1, 0};
-        ble_gattc_write_flat(connectionHandle, notificationSourceDescriptorHandle, value, sizeof(value), NewAlertSubcribeCallback, this);
-        ble_gattc_write_flat(connectionHandle, ancsEndHandle, value, sizeof(value), NewAlertSubcribeCallback, this);
-      }
-    } else if (characteristicValueHandle == controlPointHandle && ble_uuid_cmp(&controlPointChar.u, &descriptor->uuid.u)) {
-      if (controlPointDescriptorHandle == 0) {
-        NRF_LOG_INFO("ANCS Descriptor discovered : %d", descriptor->handle);
-        controlPointDescriptorHandle = descriptor->handle;
-        isControlDescriptorFound = true;
-      }
-    } else if (characteristicValueHandle == dataSourceHandle && ble_uuid_cmp(&dataSourceChar.u, &descriptor->uuid.u)) {
-      if (dataSourceDescriptorHandle == 0) {
-        NRF_LOG_INFO("ANCS Descriptor discovered : %d", descriptor->handle);
-        dataSourceDescriptorHandle = descriptor->handle;
-        isDataDescriptorFound = true;
-        uint8_t value[2] {1, 0};
-        ble_gattc_write_flat(connectionHandle, dataSourceDescriptorHandle, value, sizeof(value), NewAlertSubcribeCallback, this);
-      }
+  if (error->status == 0 && descriptor != nullptr) {
+    if (ble_uuid_cmp(&clientCharacteristicConfigDescriptorUuid.u, &descriptor->uuid.u) != 0) {
+      return 0;
     }
-  } else {
-    if (error->status != BLE_HS_EDONE) {
-      char errorStr[55];
-      snprintf(errorStr, sizeof(errorStr), "ANCS Descriptor discovery ERROR: %d", error->status);
-      NRF_LOG_INFO(errorStr);
+
+    if (characteristicValueHandle == notificationSourceHandle && notificationSourceDescriptorHandle == 0) {
+      NRF_LOG_INFO("ANCS Notification Source CCCD discovered : %d", descriptor->handle);
+      notificationSourceDescriptorHandle = descriptor->handle;
+      isDescriptorFound = true;
+    } else if (characteristicValueHandle == dataSourceHandle && dataSourceDescriptorHandle == 0) {
+      NRF_LOG_INFO("ANCS Data Source CCCD discovered : %d", descriptor->handle);
+      dataSourceDescriptorHandle = descriptor->handle;
+      isDataDescriptorFound = true;
     }
-    if (isDescriptorFound == isDataDescriptorFound)
-      MaybeFinishDiscovery(connectionHandle);
+    return 0;
   }
+
+  if (error->status != BLE_HS_EDONE) {
+    char errorStr[55];
+    snprintf(errorStr, sizeof(errorStr), "ANCS Descriptor discovery ERROR: %d", error->status);
+    NRF_LOG_INFO(errorStr);
+  }
+
+  if (characteristicValueHandle == notificationSourceHandle && notificationSourceDescriptorHandle != 0 && !isNotificationSourceSubscribed) {
+    SubscribeToDescriptor(connectionHandle, notificationSourceDescriptorHandle);
+    return 0;
+  }
+
+  if (characteristicValueHandle == dataSourceHandle && dataSourceDescriptorHandle != 0 && !isDataSourceSubscribed) {
+    SubscribeToDescriptor(connectionHandle, dataSourceDescriptorHandle);
+    return 0;
+  }
+
+  StartNextDescriptorDiscovery(connectionHandle);
   return 0;
 }
 
@@ -147,17 +152,22 @@ int AppleNotificationCenterClient::OnNewAlertSubcribe(uint16_t connectionHandle,
                                                       const ble_gatt_error* error,
                                                       ble_gatt_attr* /*attribute*/) {
   if (error->status == 0) {
-    NRF_LOG_INFO("ANCS New alert subscribe OK");
-
-    // Mark subscriptions complete only after both CCCDs are known
-    if (notificationSourceDescriptorHandle != 0 && dataSourceDescriptorHandle != 0) {
-      subscriptionsDone = true;
+    if (pendingSubscriptionDescriptorHandle == notificationSourceDescriptorHandle) {
+      NRF_LOG_INFO("ANCS Notification Source subscribe OK");
+      isNotificationSourceSubscribed = true;
+    } else if (pendingSubscriptionDescriptorHandle == dataSourceDescriptorHandle) {
+      NRF_LOG_INFO("ANCS Data Source subscribe OK");
+      isDataSourceSubscribed = true;
+    } else {
+      NRF_LOG_INFO("ANCS subscribe OK");
     }
   } else {
     NRF_LOG_INFO("ANCS New alert subscribe ERROR");
   }
-  if (isDescriptorFound == isControlDescriptorFound && isDescriptorFound == isDataDescriptorFound)
-    MaybeFinishDiscovery(connectionHandle);
+
+  pendingSubscriptionDescriptorHandle = 0;
+  subscriptionsDone = isNotificationSourceSubscribed && (!isDataCharacteristicDiscovered || isDataSourceSubscribed);
+  StartNextDescriptorDiscovery(connectionHandle);
 
   return 0;
 }
@@ -176,9 +186,70 @@ int AppleNotificationCenterClient::OnControlPointWrite(uint16_t /*connectionHand
 }
 
 void AppleNotificationCenterClient::MaybeFinishDiscovery(uint16_t connectionHandle) {
-  if (isCharacteristicDiscovered && isControlCharacteristicDiscovered && isDataCharacteristicDiscovered && isDescriptorFound &&
-      isControlDescriptorFound && isDataDescriptorFound && subscriptionsDone) {
+  if (discoveryCompleteNotified) {
+    return;
+  }
+
+  if (!isDiscovered || !isCharacteristicDiscovered) {
+    discoveryCompleteNotified = true;
     onServiceDiscovered(connectionHandle);
+    return;
+  }
+
+  subscriptionsDone = isNotificationSourceSubscribed && (!isDataCharacteristicDiscovered || isDataSourceSubscribed);
+  const bool descriptorDiscoveryDone =
+    isNotificationSourceDescriptorDiscoveryComplete && (!isDataCharacteristicDiscovered || isDataSourceDescriptorDiscoveryComplete);
+  if (subscriptionsDone || descriptorDiscoveryDone) {
+    discoveryCompleteNotified = true;
+    onServiceDiscovered(connectionHandle);
+  }
+}
+
+void AppleNotificationCenterClient::StartNextDescriptorDiscovery(uint16_t connectionHandle) {
+  if (pendingSubscriptionDescriptorHandle != 0) {
+    return;
+  }
+
+  if (isCharacteristicDiscovered && !isNotificationSourceDescriptorDiscoveryComplete) {
+    isNotificationSourceDescriptorDiscoveryComplete = true;
+    const uint16_t endHandle = notificationSourceEndHandle != 0 ? notificationSourceEndHandle : ancsEndHandle;
+    int rc =
+      ble_gattc_disc_all_dscs(connectionHandle, notificationSourceHandle, endHandle, OnANCSDescriptorDiscoveryEventCallback, this);
+    if (rc == 0) {
+      return;
+    }
+    NRF_LOG_INFO("ANCS Notification Source descriptor discovery start ERROR: %d", rc);
+  }
+
+  if (isDataCharacteristicDiscovered && !isDataSourceDescriptorDiscoveryComplete) {
+    isDataSourceDescriptorDiscoveryComplete = true;
+    const uint16_t endHandle = dataSourceEndHandle != 0 ? dataSourceEndHandle : ancsEndHandle;
+    int rc = ble_gattc_disc_all_dscs(connectionHandle, dataSourceHandle, endHandle, OnANCSDescriptorDiscoveryEventCallback, this);
+    if (rc == 0) {
+      return;
+    }
+    NRF_LOG_INFO("ANCS Data Source descriptor discovery start ERROR: %d", rc);
+  }
+
+  MaybeFinishDiscovery(connectionHandle);
+}
+
+void AppleNotificationCenterClient::SubscribeToDescriptor(uint16_t connectionHandle, uint16_t descriptorHandle) {
+  uint8_t value[2] {1, 0};
+  pendingSubscriptionDescriptorHandle = descriptorHandle;
+  int rc = ble_gattc_write_flat(connectionHandle, descriptorHandle, value, sizeof(value), NewAlertSubcribeCallback, this);
+  if (rc != 0) {
+    NRF_LOG_INFO("ANCS subscribe start ERROR: %d", rc);
+    pendingSubscriptionDescriptorHandle = 0;
+    StartNextDescriptorDiscovery(connectionHandle);
+  }
+}
+
+void AppleNotificationCenterClient::AssignCharacteristicEndHandle(uint16_t characteristicValueHandle, uint16_t endHandle) {
+  if (characteristicValueHandle == notificationSourceHandle) {
+    notificationSourceEndHandle = endHandle;
+  } else if (characteristicValueHandle == dataSourceHandle) {
+    dataSourceEndHandle = endHandle;
   }
 }
 
@@ -236,6 +307,10 @@ void AppleNotificationCenterClient::OnNotification(ble_gap_event* event) {
     // }
 
     // Request ANCS more info
+    if (controlPointHandle == 0 || dataSourceHandle == 0) {
+      return;
+    }
+
     // The +4 is for the "..." at the end of the string
     uint8_t titleSize = maxTitleSize + 4;
     uint8_t subTitleSize = maxSubtitleSize + 4;
@@ -439,11 +514,15 @@ void AppleNotificationCenterClient::Reset() {
   serviceChangedHandle = 0;
   serviceChangedDescriptorHandle = 0;
   notificationSourceHandle = 0;
+  notificationSourceEndHandle = 0;
   notificationSourceDescriptorHandle = 0;
   controlPointHandle = 0;
   controlPointDescriptorHandle = 0;
   dataSourceHandle = 0;
+  dataSourceEndHandle = 0;
   dataSourceDescriptorHandle = 0;
+  pendingSubscriptionDescriptorHandle = 0;
+  lastCharacteristicValueHandle = 0;
   isGattDiscovered = false;
   isGattCharacteristicDiscovered = false;
   isGattDescriptorFound = false;
@@ -455,6 +534,11 @@ void AppleNotificationCenterClient::Reset() {
   isDataCharacteristicDiscovered = false;
   isDataDescriptorFound = false;
   subscriptionsDone = false;
+  discoveryCompleteNotified = false;
+  isNotificationSourceDescriptorDiscoveryComplete = false;
+  isDataSourceDescriptorDiscoveryComplete = false;
+  isNotificationSourceSubscribed = false;
+  isDataSourceSubscribed = false;
 
   notifications.clear();
 }
