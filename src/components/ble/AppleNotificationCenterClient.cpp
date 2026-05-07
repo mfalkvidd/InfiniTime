@@ -564,22 +564,227 @@ void AppleNotificationCenterClient::DebugNotification(const char* msg) const {
   systemTask.PushMessage(Pinetime::System::Messages::OnNewNotification);
 }
 
+namespace {
+  static constexpr uint32_t faHeart = 0xF004;
+  static constexpr uint32_t faStar = 0xF005;
+  static constexpr uint32_t faFire = 0xF06D;
+  static constexpr uint32_t faEyeSlash = 0xF070;
+  static constexpr uint32_t faHandPointDown = 0xF0A7;
+  static constexpr uint32_t faSmile = 0xF118;
+  static constexpr uint32_t faFrown = 0xF119;
+  static constexpr uint32_t faMeh = 0xF11A;
+  static constexpr uint32_t faQuestion = 0xF128;
+  static constexpr uint32_t faThumbsUp = 0xF164;
+  static constexpr uint32_t faHandPeace = 0xF25B;
+  static constexpr uint32_t faDumbbell = 0xF44B;
+  static constexpr uint32_t faHands = 0xF4C2;
+  static constexpr uint32_t faSmileWink = 0xF4DA;
+  static constexpr uint32_t faGlasses = 0xF530;
+  static constexpr uint32_t faGrin = 0xF580;
+  static constexpr uint32_t faGrinBeamSweat = 0xF583;
+  static constexpr uint32_t faGrinHearts = 0xF584;
+  static constexpr uint32_t faGrinSquintTears = 0xF586;
+  static constexpr uint32_t faGrinStars = 0xF587;
+  static constexpr uint32_t faGrinTears = 0xF588;
+  static constexpr uint32_t faGrinTongue = 0xF589;
+  static constexpr uint32_t faKissWinkHeart = 0xF598;
+  static constexpr uint32_t faLaughBeam = 0xF59A;
+  static constexpr uint32_t faLaughSquint = 0xF59B;
+  static constexpr uint32_t faMehRollingEyes = 0xF5A5;
+  static constexpr uint32_t faSadCry = 0xF5B3;
+  static constexpr uint32_t faSadTear = 0xF5B4;
+  static constexpr uint32_t faSmileBeam = 0xF5B8;
+  static constexpr uint32_t faSpa = 0xF5BB;
+  static constexpr uint32_t faSurprise = 0xF5C2;
+  static constexpr uint32_t faTired = 0xF5C8;
+  static constexpr uint32_t faPrayingHands = 0xF684;
+  static constexpr uint32_t faGlassCheers = 0xF79F;
+  static constexpr uint32_t faHeartBroken = 0xF7A9;
+
+  bool IsInFontDefinition(uint32_t codepoint) {
+    // Check if the codepoint falls into the specified font ranges or is explicitly listed.
+    return (codepoint >= 0x20 && codepoint <= 0x7E) ||    // Printable ASCII
+           codepoint == 0xC4 ||                           // A with diaeresis
+           codepoint == 0xC5 ||                           // A with ring
+           codepoint == 0xD6 ||                           // O with diaeresis
+           codepoint == 0xE4 ||                           // a with diaeresis
+           codepoint == 0xE5 ||                           // a with ring
+           codepoint == 0xF6 ||                           // o with diaeresis
+           (codepoint >= 0x410 && codepoint <= 0x44F) ||  // Cyrillic
+           codepoint == 0xB0 ||
+           codepoint == 0xFFFD;
+  }
+
+  bool IsEmojiVariantCodepoint(uint32_t codepoint) {
+    return codepoint == 0x200D ||                         // Zero width joiner
+           codepoint == 0x2640 ||                         // Female sign
+           codepoint == 0x2642 ||                         // Male sign
+           codepoint == 0xFE0E ||                         // Text presentation selector
+           codepoint == 0xFE0F ||                         // Emoji presentation selector
+           (codepoint >= 0x1F3FB && codepoint <= 0x1F3FF); // Emoji skin tone modifiers
+  }
+
+  void AppendUtf8(std::string& output, uint32_t codepoint) {
+    if (codepoint <= 0x7F) {
+      output.push_back(static_cast<char>(codepoint));
+    } else if (codepoint <= 0x7FF) {
+      output.push_back(static_cast<char>(0xC0 | (codepoint >> 6)));
+      output.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+    } else if (codepoint <= 0xFFFF) {
+      output.push_back(static_cast<char>(0xE0 | (codepoint >> 12)));
+      output.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+      output.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+    } else {
+      output.push_back(static_cast<char>(0xF0 | (codepoint >> 18)));
+      output.push_back(static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F)));
+      output.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+      output.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+    }
+  }
+
+  const char* EmojiToText(uint32_t codepoint) {
+    switch (codepoint) {
+      case 0x203C:  // Double exclamation mark
+        return "!!";
+      case 0x1F4AF: // Hundred points
+        return "100";
+      default:
+        return nullptr;
+    }
+  }
+
+  uint32_t EmojiToFontAwesome(uint32_t codepoint) {
+    switch (codepoint) {
+      case 0x1F602: // Face with tears of joy
+        return faGrinTears;
+      case 0x1F923: // Rolling on the floor laughing
+        return faGrinSquintTears;
+      case 0x1F60D: // Smiling face with heart-eyes
+        return faGrinHearts;
+      case 0x1F60A: // Smiling face with smiling eyes
+      case 0x1F60C: // Relieved face
+      case 0x1F607: // Smiling face with halo
+      case 0x1F642: // Slightly smiling face
+      case 0x263A:  // Smiling face
+        return faSmileBeam;
+      case 0x1F62D: // Loudly crying face
+        return faSadCry;
+      case 0x1F618: // Face blowing a kiss
+        return faKissWinkHeart;
+      case 0x1F605: // Grinning face with sweat
+        return faGrinBeamSweat;
+      case 0x1F601: // Beaming face with smiling eyes
+      case 0x1F600: // Grinning face
+      case 0x1F603: // Grinning face with big eyes
+        return faGrin;
+      case 0x1F622: // Crying face
+        return faSadTear;
+      case 0x1F914: // Thinking face
+      case 0x1F937: // Shrug
+        return faQuestion;
+      case 0x1F606: // Grinning squinting face
+        return faLaughSquint;
+      case 0x1F644: // Face with rolling eyes
+        return faMehRollingEyes;
+      case 0x1F609: // Winking face
+        return faSmileWink;
+      case 0x1F917: // Hugging face
+        return faHands;
+      case 0x1F614: // Pensive face
+        return faFrown;
+      case 0x1F60E: // Smiling face with sunglasses
+        return faGlasses;
+      case 0x1F926: // Face palm
+        return faTired;
+      case 0x1F631: // Face screaming in fear
+        return faSurprise;
+      case 0x1F60B: // Face savoring food
+        return faGrinTongue;
+      case 0x1F60F: // Smirking face
+      case 0x1F612: // Unamused face
+        return faMeh;
+      case 0x1F929: // Star-struck
+        return faGrinStars;
+      case 0x1F604: // Grinning face with smiling eyes
+        return faLaughBeam;
+      case 0x1F92D: // Face with hand over mouth
+        return faSmile;
+      case 0x1F64F: // Folded hands
+        return faPrayingHands;
+      case 0x1F44D: // Thumbs up
+        return faThumbsUp;
+      case 0x1F44F: // Clapping hands
+      case 0x1F64C: // Raising hands
+        return faHands;
+      case 0x1F4AA: // Flexed biceps
+        return faDumbbell;
+      case 0x1F44C: // OK hand
+        return 0xF00C; // Check
+      case 0x270C: // Victory hand
+        return faHandPeace;
+      case 0x1F447: // Backhand index pointing down
+        return faHandPointDown;
+      case 0x2764:  // Heavy black heart
+      case 0x2665:  // Black heart suit
+      case 0x2763:  // Heavy heart exclamation mark ornament
+      case 0x1F493: // Beating heart
+      case 0x1F495: // Two hearts
+      case 0x1F496: // Sparkling heart
+      case 0x1F497: // Growing heart
+      case 0x1F499: // Blue heart
+      case 0x1F49A: // Green heart
+      case 0x1F49B: // Yellow heart
+      case 0x1F49C: // Purple heart
+      case 0x1F49E: // Revolving hearts
+      case 0x1F5A4: // Black heart
+        return faHeart;
+      case 0x1F494: // Broken heart
+        return faHeartBroken;
+      case 0x1F525: // Fire
+        return faFire;
+      case 0x1F339: // Rose
+      case 0x1F338: // Cherry blossom
+        return faSpa;
+      case 0x1F389: // Party popper
+        return faGlassCheers;
+      case 0x2728: // Sparkles
+        return faStar;
+      case 0x1F648: // See-no-evil monkey
+        return faEyeSlash;
+      case 0x1F3B6: // Multiple musical notes
+        return 0xF001; // Music
+      default:
+        return 0;
+    }
+  }
+
+  void AppendDecodedCodepoint(std::string& decoded, const std::string& utf8Char, uint32_t codepoint) {
+    if (IsEmojiVariantCodepoint(codepoint)) {
+      return;
+    }
+
+    if (const char* text = EmojiToText(codepoint); text != nullptr) {
+      decoded.append(text);
+      return;
+    }
+
+    const uint32_t fontAwesomeCodepoint = EmojiToFontAwesome(codepoint);
+    if (fontAwesomeCodepoint != 0) {
+      AppendUtf8(decoded, fontAwesomeCodepoint);
+      return;
+    }
+
+    if (IsInFontDefinition(codepoint)) {
+      decoded.append(utf8Char);
+    } else {
+      decoded.append("�"); // Replace unsupported
+    }
+  }
+}
+
 std::string AppleNotificationCenterClient::DecodeUtf8String(os_mbuf* om, uint16_t size, uint16_t offset) {
   std::string decoded;
   decoded.reserve(size);
-
-  auto isInFontDefinition = [](uint32_t codepoint) -> bool {
-    // Check if the codepoint falls into the specified font ranges or is explicitly listed
-    return (codepoint >= 0x20 && codepoint <= 0x7E) ||   // Printable ASCII
-           codepoint == 0xC4 ||                          // A with diaeresis
-           codepoint == 0xC5 ||                          // A with ring
-           codepoint == 0xD6 ||                          // O with diaeresis
-           codepoint == 0xE4 ||                          // a with diaeresis
-           codepoint == 0xE5 ||                          // a with ring
-           codepoint == 0xF6 ||                          // o with diaeresis
-           (codepoint >= 0x410 && codepoint <= 0x44F) || // Cyrillic
-           codepoint == 0xB0;
-  };
 
   for (uint16_t i = 0; i < size;) {
     uint8_t byte = 0;
@@ -588,11 +793,9 @@ std::string AppleNotificationCenterClient::DecodeUtf8String(os_mbuf* om, uint16_
     }
 
     if (byte <= 0x7F) { // Single-byte UTF-8 (ASCII)
-      if (isInFontDefinition(byte)) {
-        decoded.push_back(static_cast<char>(byte));
-      } else {
-        decoded.append("�"); // Replace unsupported
-      }
+      std::string utf8Char;
+      utf8Char.push_back(static_cast<char>(byte));
+      AppendDecodedCodepoint(decoded, utf8Char, byte);
       ++i;
     } else { // Multi-byte UTF-8
       // Determine sequence length based on leading byte
@@ -603,6 +806,12 @@ std::string AppleNotificationCenterClient::DecodeUtf8String(os_mbuf* om, uint16_
         sequenceLength = 3; // 3-byte sequence
       } else if ((byte & 0xF8) == 0xF0) {
         sequenceLength = 4; // 4-byte sequence
+      }
+
+      if (sequenceLength == 0) {
+        decoded.append("�"); // Invalid leading byte, replace
+        ++i;
+        continue;
       }
 
       if (i + sequenceLength > size) {
@@ -639,8 +848,8 @@ std::string AppleNotificationCenterClient::DecodeUtf8String(os_mbuf* om, uint16_
         }
       }
 
-      if (validSequence && isInFontDefinition(codepoint)) {
-        decoded.append(utf8Char); // Append valid UTF-8 character
+      if (validSequence) {
+        AppendDecodedCodepoint(decoded, utf8Char, codepoint);
       } else {
         decoded.append("�"); // Replace unsupported
       }
