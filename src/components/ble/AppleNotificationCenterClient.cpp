@@ -760,6 +760,10 @@ namespace {
     }
   }
 
+  bool IsNonBreakingSpace(uint32_t codepoint) {
+    return codepoint == 0x00A0 || codepoint == 0x202F || codepoint == 0x2007;
+  }
+
   void AppendDecodedCodepoint(std::string& decoded, const std::string& utf8Char, uint32_t codepoint) {
     if (IsEmojiVariantCodepoint(codepoint)) {
       return;
@@ -767,6 +771,12 @@ namespace {
 
     if (const char* text = EmojiToText(codepoint); text != nullptr) {
       decoded.append(text);
+      return;
+    }
+
+    if (IsNonBreakingSpace(codepoint)) {
+      // Convert non-breaking space to normal space
+      decoded.append(" ");
       return;
     }
 
