@@ -782,6 +782,14 @@ namespace {
       decoded.append("�"); // Replace unsupported
     }
   }
+
+  bool IsLineBreak(uint8_t byte) {
+    return byte == '\r' || byte == '\n';
+  }
+
+  bool IsLineBreakPair(uint8_t firstByte, uint8_t secondByte) {
+    return (firstByte == '\r' && secondByte == '\n') || (firstByte == '\n' && secondByte == '\r');
+  }
 }
 
 std::string AppleNotificationCenterClient::DecodeUtf8String(os_mbuf* om, uint16_t size, uint16_t offset) {
@@ -792,6 +800,20 @@ std::string AppleNotificationCenterClient::DecodeUtf8String(os_mbuf* om, uint16_
     uint8_t byte = 0;
     if (os_mbuf_copydata(om, offset + i, 1, &byte) != 0) {
       break; // Handle error in copying data (e.g., log or terminate processing)
+    }
+
+    if (IsLineBreak(byte)) {
+      // Render notification line breaks as spacing instead of real newlines, since
+      // vertical space is scarce on the watch notification screen.
+      decoded.append("  ");
+      ++i;
+
+      uint8_t nextByte = 0;
+      if (i < size && os_mbuf_copydata(om, offset + i, 1, &nextByte) == 0 && IsLineBreakPair(byte, nextByte)) {
+        // Treat CRLF / LFCR as a single line break (don't convert to 4 spaces)
+        ++i;
+      }
+      continue;
     }
 
     if (byte <= 0x7F) { // Single-byte UTF-8 (ASCII)
