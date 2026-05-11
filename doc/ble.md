@@ -97,6 +97,9 @@ The following custom services are implemented in InfiniTime:
 - Since InfiniTime 1.14
   - [Simple Weather Service](SimpleWeatherService.md) : `00050000-78fc-48fe-8e23-433b3a1942d0`
 
+- Since InfiniTime next
+  - [Screenshot Service](ScreenshotService.md) : `00060000-78fc-48fe-8e23-433b3a1942d0`
+
 ---
 
 ## BLE services

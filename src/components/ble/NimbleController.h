@@ -22,6 +22,9 @@
 #include "components/ble/ServiceDiscovery.h"
 #include "components/ble/MotionService.h"
 #include "components/ble/SimpleWeatherService.h"
+#ifndef PINETIME_IS_RECOVERY
+  #include "components/ble/ScreenshotService.h"
+#endif
 #include "components/fs/FS.h"
 
 namespace Pinetime {
@@ -71,6 +74,12 @@ namespace Pinetime {
         return weatherService;
       };
 
+#ifndef PINETIME_IS_RECOVERY
+      Pinetime::Controllers::ScreenshotService& screenshot() {
+        return screenshotService;
+      };
+#endif
+
       uint16_t connHandle();
       void NotifyBatteryLevel(uint8_t level);
 
@@ -106,6 +115,9 @@ namespace Pinetime {
       HeartRateService heartRateService;
       MotionService motionService;
       FSService fsService;
+#ifndef PINETIME_IS_RECOVERY
+      ScreenshotService screenshotService;
+#endif
       ServiceDiscovery serviceDiscovery;
 
       uint8_t addrType;

@@ -373,6 +373,14 @@ void SystemTask::Work() {
             nimbleController.DisableRadio();
           }
           break;
+        case Messages::ScreenshotRequested:
+#ifndef PINETIME_IS_RECOVERY
+          NRF_LOG_INFO("[systemtask] Screenshot requested");
+          GoToRunning();
+          wakeLocksHeld++;
+          displayApp.PushMessage(Pinetime::Applications::Display::Messages::ScreenshotRequested);
+#endif
+          break;
         default:
           break;
       }

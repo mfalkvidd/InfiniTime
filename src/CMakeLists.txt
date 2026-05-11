@@ -462,6 +462,7 @@ list(APPEND SOURCE_FILES
         components/ble/NavigationService.cpp
         components/ble/BatteryInformationService.cpp
         components/ble/FSService.cpp
+        components/ble/ScreenshotService.cpp
         components/ble/ImmediateAlertService.cpp
         components/ble/ServiceDiscovery.cpp
         components/ble/HeartRateService.cpp
@@ -652,6 +653,7 @@ set(INCLUDE_FILES
         components/firmwarevalidator/FirmwareValidator.h
         components/ble/BatteryInformationService.h
         components/ble/FSService.h
+        components/ble/ScreenshotService.h
         components/ble/ImmediateAlertService.h
         components/ble/ServiceDiscovery.h
         components/ble/BleClient.h

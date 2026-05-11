@@ -6,6 +6,7 @@
 #include "drivers/St7789.h"
 #include "littlefs/lfs.h"
 #include "components/fs/FS.h"
+#include "lvgl/src/lv_core/lv_refr.h"
 
 using namespace Pinetime::Components;
 
@@ -156,6 +157,8 @@ bool LittleVgl::IsScrolling() {
 void LittleVgl::FlushDisplay(const lv_area_t* area, lv_color_t* color_p) {
   uint16_t y1, y2, width, height = 0;
 
+  WriteScreenshotArea(area, color_p);
+
   if ((scrollDirection == LittleVgl::FullRefreshDirections::Down) && (area->y2 == visibleNbLines - 1)) {
     writeOffset = ((writeOffset + totalNbLines) - visibleNbLines) % totalNbLines;
   } else if ((scrollDirection == FullRefreshDirections::Up) && (area->y1 == 0)) {
@@ -277,4 +280,58 @@ bool LittleVgl::GetTouchPadInfo(lv_indev_data_t* ptr) {
     ptr->state = LV_INDEV_STATE_REL;
   }
   return false;
+}
+
+bool LittleVgl::CaptureScreenshot(const char* path) {
+  if (screenshotInProgress || scrollDirection != FullRefreshDirections::None) {
+    return false;
+  }
+
+  int res = filesystem.FileOpen(&screenshotFile, path, LFS_O_WRONLY | LFS_O_CREAT | LFS_O_TRUNC);
+  if (res != 0) {
+    return false;
+  }
+
+  screenshotError = false;
+  screenshotInProgress = true;
+  fullRefresh = true;
+
+  lv_obj_invalidate(lv_scr_act());
+  lv_refr_now(nullptr);
+
+  screenshotInProgress = false;
+  res = filesystem.FileClose(&screenshotFile);
+
+  return !screenshotError && res == 0;
+}
+
+void LittleVgl::WriteScreenshotArea(const lv_area_t* area, const lv_color_t* color_p) {
+  if (!screenshotInProgress || screenshotError) {
+    return;
+  }
+
+  const uint16_t width = (area->x2 - area->x1) + 1;
+  const uint16_t height = (area->y2 - area->y1) + 1;
+
+  for (uint16_t y = 0; y < height; y++) {
+    const uint32_t offset = ((static_cast<uint32_t>(area->y1 + y) * visibleNbLines) + area->x1) * sizeof(uint16_t);
+    int res = filesystem.FileSeek(&screenshotFile, offset);
+    if (res < 0) {
+      screenshotError = true;
+      return;
+    }
+
+    for (uint16_t x = 0; x < width; x++) {
+      const auto color = color_p[(y * width) + x];
+      const uint16_t rgb565 = (LV_COLOR_GET_R(color) << 11) | (LV_COLOR_GET_G(color) << 5) | LV_COLOR_GET_B(color);
+      screenshotLine[(x * 2)] = static_cast<uint8_t>(rgb565 >> 8);
+      screenshotLine[(x * 2) + 1] = static_cast<uint8_t>(rgb565);
+    }
+
+    res = filesystem.FileWrite(&screenshotFile, screenshotLine, width * sizeof(uint16_t));
+    if (res != static_cast<int>(width * sizeof(uint16_t))) {
+      screenshotError = true;
+      return;
+    }
+  }
 }

@@ -28,6 +28,7 @@ namespace Pinetime {
       void CancelTap();
       void ClearTouchState();
       bool IsScrolling();
+      bool CaptureScreenshot(const char* path);
 
       bool GetFullRefresh() {
         bool returnValue = fullRefresh;
@@ -41,6 +42,7 @@ namespace Pinetime {
       void InitDisplay();
       void InitTouchpad();
       void InitFileSystem();
+      void WriteScreenshotArea(const lv_area_t* area, const lv_color_t* color_p);
 
       Pinetime::Drivers::St7789& lcd;
       Pinetime::Controllers::FS& filesystem;
@@ -67,6 +69,11 @@ namespace Pinetime {
       lv_point_t touchPoint = {};
       bool tapped = false;
       bool isCancelled = false;
+
+      bool screenshotInProgress = false;
+      bool screenshotError = false;
+      lfs_file_t screenshotFile {};
+      uint8_t screenshotLine[LV_HOR_RES_MAX * 2];
     };
   }
 }

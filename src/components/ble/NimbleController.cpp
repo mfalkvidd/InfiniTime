@@ -49,6 +49,9 @@ NimbleController::NimbleController(Pinetime::System::SystemTask& systemTask,
     heartRateService {*this, heartRateController},
     motionService {*this, motionController},
     fsService {systemTask, fs},
+#ifndef PINETIME_IS_RECOVERY
+    screenshotService {systemTask},
+#endif
     serviceDiscovery({&currentTimeClient, &alertNotificationClient}) {
 }
 
@@ -98,6 +101,9 @@ void NimbleController::Init() {
   heartRateService.Init();
   motionService.Init();
   fsService.Init();
+#ifndef PINETIME_IS_RECOVERY
+  screenshotService.Init();
+#endif
 
   int rc;
   rc = ble_hs_util_ensure_addr(0);

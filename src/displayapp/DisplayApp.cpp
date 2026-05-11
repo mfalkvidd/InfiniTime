@@ -56,9 +56,11 @@
 #include "utility/Math.h"
 
 #include "libs/lv_conf.h"
+#include "littlefs/lfs.h"
 #include "UserApps.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <limits>
 
 using namespace Pinetime::Applications;
@@ -481,6 +483,12 @@ void DisplayApp::Refresh() {
       case Messages::BleRadioEnableToggle:
         PushMessageToSystemTask(System::Messages::BleRadioEnableToggle);
         break;
+      case Messages::ScreenshotRequested: {
+        char path[64] {};
+        const bool success = CaptureScreenshot(path, sizeof(path));
+        systemTask->nimble().screenshot().OnScreenshotResult(path, success);
+        break;
+      }
       case Messages::Chime:
         LoadNewScreen(Apps::Clock, DisplayApp::FullRefreshDirections::None);
         motorController.RunForDuration(35);
@@ -682,6 +690,36 @@ void DisplayApp::PushMessage(Messages msg) {
 
     xQueueSend(msgQueue, &msg, timeout);
   }
+}
+
+bool DisplayApp::CaptureScreenshot(char* path, size_t pathSize) {
+  int res = filesystem.DirCreate("/screenshots");
+  if (res != 0 && res != LFS_ERR_EXIST) {
+    return false;
+  }
+
+  dateTimeController.CurrentDateTime();
+  const int pathLength = snprintf(path,
+                                  pathSize,
+                                  "/screenshots/shot-%04u%02u%02u-%02u%02u%02u.rgb565",
+                                  static_cast<unsigned>(dateTimeController.Year()),
+                                  static_cast<unsigned>(dateTimeController.Month()),
+                                  static_cast<unsigned>(dateTimeController.Day()),
+                                  static_cast<unsigned>(dateTimeController.Hours()),
+                                  static_cast<unsigned>(dateTimeController.Minutes()),
+                                  static_cast<unsigned>(dateTimeController.Seconds()));
+  if (pathLength < 0 || static_cast<size_t>(pathLength) >= pathSize) {
+    return false;
+  }
+
+  const bool success = lvgl.CaptureScreenshot(path);
+  lfs_info info {};
+  if (!success || filesystem.Stat(path, &info) != 0 || info.size != LV_HOR_RES_MAX * LV_VER_RES_MAX * sizeof(uint16_t)) {
+    filesystem.FileDelete(path);
+    return false;
+  }
+
+  return true;
 }
 
 void DisplayApp::SetFullRefresh(DisplayApp::FullRefreshDirections direction) {
