@@ -237,14 +237,8 @@ void SystemTask::Work() {
           break;
         case Messages::BleConnected:
           displayApp.PushMessage(Pinetime::Applications::Display::Messages::NotifyDeviceActivity);
-          isBleDiscoveryStarted = false;
-          isBleDiscoveryTimerRunning = false;
-          break;
-        case Messages::BleStartDiscovery:
-          if (!isBleDiscoveryStarted) {
-            isBleDiscoveryTimerRunning = true;
-            bleDiscoveryTimer = 1;
-          }
+          isBleDiscoveryTimerRunning = true;
+          bleDiscoveryTimer = 5;
           break;
         case Messages::BleFirmwareUpdateStarted:
           GoToRunning();
@@ -389,8 +383,8 @@ void SystemTask::Work() {
       if (isBleDiscoveryTimerRunning) {
         if (bleDiscoveryTimer == 0) {
           isBleDiscoveryTimerRunning = false;
-          isBleDiscoveryStarted = true;
-          // Service discovery is started after link security is established. Keep a short defer so the security callback can unwind.
+          // Services discovery is deferred from 3 seconds to avoid the conflicts between the host communicating with the
+          // target and vice-versa. I'm not sure if this is the right way to handle this...
           nimbleController.StartDiscovery();
         } else {
           bleDiscoveryTimer--;
