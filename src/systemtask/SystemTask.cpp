@@ -237,11 +237,11 @@ void SystemTask::Work() {
           break;
         case Messages::BleConnected:
           displayApp.PushMessage(Pinetime::Applications::Display::Messages::NotifyDeviceActivity);
-          isBleDiscoveryStarted = false;
+          hasBleDiscoveryStartedForConnection = false;
           break;
         case Messages::BleStartDiscovery:
-          if (!isBleDiscoveryStarted) {
-            isBleDiscoveryStarted = true;
+          if (!hasBleDiscoveryStartedForConnection) {
+            hasBleDiscoveryStartedForConnection = true;
             nimbleController.StartDiscovery();
           }
           break;

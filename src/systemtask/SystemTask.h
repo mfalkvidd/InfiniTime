@@ -130,7 +130,7 @@ namespace Pinetime {
 
       static void Process(void* instance);
       void Work();
-      bool isBleDiscoveryStarted = false;
+      bool hasBleDiscoveryStartedForConnection = false;
       TimerHandle_t measureBatteryTimer;
       uint8_t wakeLocksHeld = 0;
       SystemTaskState state = SystemTaskState::Running;
