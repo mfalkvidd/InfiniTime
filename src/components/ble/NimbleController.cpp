@@ -211,6 +211,7 @@ int NimbleController::OnGAPEvent(ble_gap_event* event) {
         connectionHandle = event->connect.conn_handle;
         bleController.Connect();
         systemTask.PushMessage(Pinetime::System::Messages::BleConnected);
+        // Service discovery is deferred via systemtask
         ble_gap_security_initiate(event->connect.conn_handle);
       }
       break;
